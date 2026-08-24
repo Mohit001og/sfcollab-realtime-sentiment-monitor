@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Component, useEffect, useMemo, useRef, useState } from 'react';
 import { backendConfig } from './services/backendConfig';
 
 const MESSAGE_LIMIT = 50;
@@ -67,20 +67,31 @@ function sentimentClass(sentiment) {
 
 function normalizeMood(data) {
   if (!data || typeof data !== 'object') {
-    return null;
+    return {
+      score: null,
+      windowMinutes: MOOD_WINDOW_MINUTES,
+      messageCount: 0,
+      history: [],
+    };
   }
 
-  if (typeof data.score !== 'number' && data.score !== null) {
-    return null;
-  }
+  const score = typeof data.score === 'number' && Number.isFinite(data.score) ? data.score : null;
+  const windowMinutes =
+    typeof data.window_minutes === 'number' && Number.isFinite(data.window_minutes)
+      ? data.window_minutes
+      : MOOD_WINDOW_MINUTES;
+  const messageCount =
+    typeof data.message_count === 'number' && Number.isFinite(data.message_count)
+      ? data.message_count
+      : 0;
 
   return {
-    score: data.score,
-    windowMinutes: data.window_minutes ?? MOOD_WINDOW_MINUTES,
-    messageCount: data.message_count ?? 0,
+    score,
+    windowMinutes,
+    messageCount,
     history: Array.isArray(data.history)
       ? data.history
-          .filter((item) => item && typeof item.timestamp === 'string' && typeof item.score === 'number')
+          .filter((item) => item && typeof item.timestamp === 'string' && typeof item.score === 'number' && Number.isFinite(item.score))
           .map((item) => ({ timestamp: item.timestamp, score: item.score }))
       : [],
   };
@@ -297,9 +308,36 @@ function MoodChart({ history, windowMinutes }) {
   );
 }
 
-export default function App() {
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <main className="dashboard-shell">
+          <section className="dashboard">
+            <div className="alert-strip" role="alert">
+              The dashboard could not render this state. Refresh the page or check the backend configuration.
+            </div>
+          </section>
+        </main>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function Dashboard() {
   const [messages, setMessages] = useState([]);
-  const [mood, setMood] = useState(null);
+  const [mood, setMood] = useState(() => normalizeMood(null));
   const [moodLoading, setMoodLoading] = useState(true);
   const [moodError, setMoodError] = useState('');
   const [connectionStatus, setConnectionStatus] = useState('connecting');
@@ -353,7 +391,7 @@ export default function App() {
       } catch (error) {
         if (!active) return;
         setMoodError(error instanceof Error ? error.message : 'Failed to load mood state');
-        setMood(null);
+        setMood(normalizeMood(null));
         setChartHistory([]);
       } finally {
         if (active) setMoodLoading(false);
@@ -385,7 +423,14 @@ export default function App() {
       setConnectionStatus((current) => (current === 'connected' ? 'connected' : 'connecting'));
       setConnectionError('');
 
-      const socket = new WebSocket(backendConfig.wsUrl);
+      let socket;
+      try {
+        socket = new WebSocket(backendConfig.wsUrl);
+      } catch (error) {
+        setConnectionStatus('error');
+        setConnectionError(error instanceof Error ? error.message : 'WebSocket connection error');
+        return;
+      }
       socketRef.current = socket;
 
       socket.onopen = () => {
@@ -449,7 +494,11 @@ export default function App() {
     };
   }, []);
 
-  const moodLabel = mood?.score === null || mood?.score === undefined ? 'No active mood' : formatMoodScore(mood.score);
+  const moodScore = mood?.score;
+  const moodMessageCount = mood?.messageCount ?? 0;
+  const moodWindowMinutes = mood?.windowMinutes ?? MOOD_WINDOW_MINUTES;
+  const moodHistory = mood?.history ?? [];
+  const moodLabel = typeof moodScore === 'number' ? formatMoodScore(moodScore) : 'No active mood';
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -535,12 +584,12 @@ export default function App() {
             <div className="metric-block">
               <span className="metric-label">Mood score</span>
               <strong className="metric-value">
-                {moodLoading ? '-' : mood?.score === null ? 'No messages in the last 60 minutes' : mood.score.toFixed(2)}
+                {moodLoading ? '-' : typeof moodScore === 'number' ? moodScore.toFixed(2) : 'No messages in the last 60 minutes'}
               </strong>
             </div>
             <div className="metric-block">
               <span className="metric-label">Message count</span>
-              <strong className="metric-value">{moodLoading ? '-' : mood?.messageCount ?? 0}</strong>
+              <strong className="metric-value">{moodLoading ? '-' : moodMessageCount}</strong>
             </div>
             <div className="metric-block">
               <span className="metric-label">Window</span>
@@ -548,11 +597,11 @@ export default function App() {
             </div>
           </div>
 
-          {mood?.history?.length ? (
+          {moodHistory.length ? (
             <div className="history-summary">
               <span className="metric-label">History available for the active window</span>
               <div className="history-line">
-                {mood.history.slice(-4).map((item) => (
+                {moodHistory.slice(-4).map((item) => (
                   <span key={`${item.timestamp}-${item.score}`} className={item.score >= 0 ? 'history-token positive' : 'history-token negative'}>
                     {item.score >= 0 ? '+' : ''}
                     {item.score.toFixed(2)}
@@ -571,10 +620,10 @@ export default function App() {
               <p className="card-kicker">60-minute mood</p>
               <h2>Mood over time</h2>
             </div>
-            <div className="panel-meta">{mood?.windowMinutes ?? MOOD_WINDOW_MINUTES} minute window</div>
+            <div className="panel-meta">{moodWindowMinutes} minute window</div>
           </div>
           <ChartLegend />
-          <MoodChart history={chartHistory} windowMinutes={mood?.windowMinutes ?? MOOD_WINDOW_MINUTES} />
+          <MoodChart history={chartHistory} windowMinutes={moodWindowMinutes} />
         </section>
 
         <section className="content-grid">
@@ -650,5 +699,13 @@ export default function App() {
         </section>
       </section>
     </main>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <Dashboard />
+    </ErrorBoundary>
   );
 }
