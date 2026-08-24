@@ -498,6 +498,7 @@ function Dashboard() {
   const moodMessageCount = mood?.messageCount ?? 0;
   const moodWindowMinutes = mood?.windowMinutes ?? MOOD_WINDOW_MINUTES;
   const moodHistory = mood?.history ?? [];
+  const hasActiveMoodMessages = moodMessageCount > 0;
   const moodLabel = typeof moodScore === 'number' ? formatMoodScore(moodScore) : 'No active mood';
 
   async function handleSubmit(event) {
@@ -609,9 +610,9 @@ function Dashboard() {
                 ))}
               </div>
             </div>
-          ) : (
+          ) : !hasActiveMoodMessages ? (
             <p className="empty-copy">No messages in the last 60 minutes.</p>
-          )}
+          ) : null}
         </section>
 
         <section className="chart-panel panel">
