@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -68,16 +69,29 @@ def test_messages_validation_and_timestamp(client: TestClient) -> None:
     assert timestamp.tzinfo is not None
 
 
+def test_messages_accepts_maximum_length_message(client: TestClient) -> None:
+    app.dependency_overrides[get_sentiment_engine] = lambda: StubSentimentEngine(
+        SentimentResult(label="POSITIVE", score=0.5, latency_ms=1.0)
+    )
+    message = "x" * 1000
+
+    response = client.post("/messages", json={"message": message})
+
+    assert response.status_code == 200
+    assert response.json()["message"] == message
+
+
 @pytest.mark.parametrize(
     "payload,status_code",
     [
         ({}, 422),
+        ({"message": None}, 422),
         ({"message": ""}, 422),
         ({"message": "   "}, 400),
         ({"message": "x" * 1001}, 422),
     ],
 )
-def test_messages_reject_invalid_input(client: TestClient, payload: dict[str, str], status_code: int) -> None:
+def test_messages_reject_invalid_input(client: TestClient, payload: dict[str, Any], status_code: int) -> None:
     app.dependency_overrides[get_sentiment_engine] = lambda: StubSentimentEngine(
         SentimentResult(label="POSITIVE", score=0.5, latency_ms=1.0)
     )
