@@ -1,7 +1,9 @@
+import os
 from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from app.mood import MoodSnapshot, RollingMoodService
@@ -9,6 +11,7 @@ from app.sentiment import SentimentEngine, get_sentiment_engine
 
 
 MAX_MESSAGE_LENGTH = 1000
+DEFAULT_FRONTEND_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 
 
 class MessageRequest(BaseModel):
@@ -80,7 +83,19 @@ class ConnectionManager:
             self.disconnect(connection)
 
 
+def parse_frontend_origins(value: str | None = None) -> list[str]:
+    configured = value if value is not None else os.getenv("FRONTEND_ORIGINS", DEFAULT_FRONTEND_ORIGINS)
+    return [origin.strip() for origin in configured.split(",") if origin.strip()]
+
+
 app = FastAPI(title="SFCollab Backend")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=parse_frontend_origins(),
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 manager = ConnectionManager()
 mood_service = RollingMoodService()
 
