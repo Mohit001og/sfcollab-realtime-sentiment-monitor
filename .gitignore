@@ -46,8 +46,35 @@ Thumbs.db
 .pdm-python
 .pdm-build/
 .pypirc
-.pixi/
-.abstra/
-tempCodeRunnerFile.py
-.streamlit/
-cython_debug/
+
+# Marimo
+marimo/_static/
+marimo/_lsp/
+__marimo__/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Node / frontend tooling
+node_modules/
+dist/
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+.vite/
+.npm/
+.pnpm-store/
+.yarn/
+
+# Node / frontend tooling
+node_modules/
+dist/
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+.vite/
+.npm/
+.pnpm-store/
+.yarn/
