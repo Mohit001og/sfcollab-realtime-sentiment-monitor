@@ -314,6 +314,8 @@ export default function App() {
   const reconnectAttemptsRef = useRef(0);
 
   const moodToneClass = useMemo(() => moodTone(mood?.score ?? null), [mood?.score]);
+  const trimmedDraft = draft.trim();
+  const canSubmit = sendStatus !== 'sending' && trimmedDraft.length > 0 && trimmedDraft.length <= 1000;
 
   function replaceChartHistory(nextHistory, latestTimestampMs) {
     const normalized = dedupeHistory(nextHistory);
@@ -453,7 +455,7 @@ export default function App() {
     event.preventDefault();
     setSendError('');
 
-    const value = draft.trim();
+    const value = trimmedDraft;
     if (!value) {
       setSendError('Please enter a non-empty message.');
       return;
@@ -508,7 +510,7 @@ export default function App() {
             <p className="subtitle">Live team sentiment and mood monitoring</p>
           </div>
 
-          <div className={`status-badge status-${connectionStatus}`}>
+          <div className={`status-badge status-${connectionStatus}`} aria-live="polite">
             <span className="status-dot" />
             <span>{connectionStatus === 'error' ? 'Error' : connectionStatus[0].toUpperCase() + connectionStatus.slice(1)}</span>
           </div>
@@ -530,17 +532,17 @@ export default function App() {
           </div>
 
           <div className="mood-metrics">
-            <div>
+            <div className="metric-block">
               <span className="metric-label">Mood score</span>
               <strong className="metric-value">
                 {moodLoading ? '-' : mood?.score === null ? 'No messages in the last 60 minutes' : mood.score.toFixed(2)}
               </strong>
             </div>
-            <div>
+            <div className="metric-block">
               <span className="metric-label">Message count</span>
               <strong className="metric-value">{moodLoading ? '-' : mood?.messageCount ?? 0}</strong>
             </div>
-            <div>
+            <div className="metric-block">
               <span className="metric-label">Window</span>
               <strong className="metric-value">60 minutes</strong>
             </div>
@@ -629,14 +631,20 @@ export default function App() {
                 onChange={(event) => setDraft(event.target.value)}
                 placeholder="Type a team message..."
                 maxLength={1000}
+                aria-invalid={Boolean(sendError)}
+                aria-describedby="message-help message-error"
               />
               <div className="form-row">
-                <span className="helper-text">{draft.trim().length}/1000</span>
-                <button type="submit" disabled={sendStatus === 'sending'}>
+                <span className="helper-text" id="message-help">
+                  {trimmedDraft.length}/1000
+                </span>
+                <button type="submit" disabled={!canSubmit}>
                   {sendStatus === 'sending' ? 'Sending...' : 'Send message'}
                 </button>
               </div>
-              {sendError && <p className="form-error">{sendError}</p>}
+              <p className="form-status" id="message-error" aria-live="polite">
+                {sendError || (sendStatus === 'sent' ? 'Message sent successfully.' : 'Messages are posted to the backend and broadcast to connected clients.')}
+              </p>
             </form>
           </section>
         </section>
