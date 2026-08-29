@@ -11,7 +11,7 @@ from app.sentiment import SentimentEngine, get_sentiment_engine
 
 
 MAX_MESSAGE_LENGTH = 1000
-DEFAULT_FRONTEND_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+DEFAULT_FRONTEND_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,https://sfcollab-realtime-sentiment-monitor.vercel.app"
 
 
 class MessageRequest(BaseModel):
