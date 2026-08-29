@@ -539,7 +539,7 @@ function Dashboard() {
     setSendStatus('sending');
     sendHintTimerRef.current = window.setTimeout(() => {
       if (mountedRef.current) {
-        setSendHint('Waking up the backend... This can take up to a couple of minutes on the first request.');
+        setSendHint('Still waiting on the backend... this can take longer if the service is starting up.');
       }
     }, 5000);
 
