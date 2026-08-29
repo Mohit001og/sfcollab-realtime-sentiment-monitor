@@ -1,4 +1,6 @@
 import os
+import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Annotated
 
@@ -12,6 +14,7 @@ from app.sentiment import SentimentEngine, get_sentiment_engine
 
 MAX_MESSAGE_LENGTH = 1000
 DEFAULT_FRONTEND_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,https://sfcollab-realtime-sentiment-monitor.vercel.app"
+logger = logging.getLogger(__name__)
 
 
 class MessageRequest(BaseModel):
@@ -88,7 +91,19 @@ def parse_frontend_origins(value: str | None = None) -> list[str]:
     return [origin.strip() for origin in configured.split(",") if origin.strip()]
 
 
-app = FastAPI(title="SFCollab Backend")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Preload the sentiment pipeline at startup so the first user message
+    # does not pay the model initialization or download cost.
+    preload_started = datetime.now(timezone.utc)
+    logger.info("Sentiment engine preload started")
+    get_sentiment_engine()
+    elapsed_seconds = (datetime.now(timezone.utc) - preload_started).total_seconds()
+    logger.info("Sentiment engine preload finished in %.2fs", elapsed_seconds)
+    yield
+
+
+app = FastAPI(title="SFCollab Backend", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=parse_frontend_origins(),
