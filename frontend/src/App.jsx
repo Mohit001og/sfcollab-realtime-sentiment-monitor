@@ -344,9 +344,12 @@ function Dashboard() {
   const [connectionError, setConnectionError] = useState('');
   const [sendStatus, setSendStatus] = useState('idle');
   const [sendError, setSendError] = useState('');
+  const [sendHint, setSendHint] = useState('');
   const [draft, setDraft] = useState('');
   const [chartHistory, setChartHistory] = useState([]);
   const reconnectTimerRef = useRef(null);
+  const sendHintTimerRef = useRef(null);
+  const sendSuccessTimerRef = useRef(null);
   const socketRef = useRef(null);
   const mountedRef = useRef(true);
   const reconnectAttemptsRef = useRef(0);
@@ -367,6 +370,17 @@ function Dashboard() {
       const merged = dedupeHistory([...current, point]);
       return pruneChartHistory(merged, point.timestampMs, MOOD_WINDOW_MINUTES);
     });
+  }
+
+  function clearSendTimers() {
+    if (sendHintTimerRef.current) {
+      window.clearTimeout(sendHintTimerRef.current);
+      sendHintTimerRef.current = null;
+    }
+    if (sendSuccessTimerRef.current) {
+      window.clearTimeout(sendSuccessTimerRef.current);
+      sendSuccessTimerRef.current = null;
+    }
   }
 
   useEffect(() => {
@@ -504,6 +518,7 @@ function Dashboard() {
   async function handleSubmit(event) {
     event.preventDefault();
     setSendError('');
+    setSendHint('');
 
     const value = trimmedDraft;
     if (!value) {
@@ -516,7 +531,18 @@ function Dashboard() {
       return;
     }
 
+    if (sendStatus === 'sending') {
+      return;
+    }
+
+    clearSendTimers();
     setSendStatus('sending');
+    sendHintTimerRef.current = window.setTimeout(() => {
+      if (mountedRef.current) {
+        setSendHint('Waking up the backend... This can take up to a couple of minutes on the first request.');
+      }
+    }, 5000);
+
     try {
       const response = await fetch(`${backendConfig.httpBaseUrl}/messages`, {
         method: 'POST',
@@ -540,15 +566,28 @@ function Dashboard() {
       }
 
       setDraft('');
+      setSendHint('');
       setSendStatus('sent');
-      window.setTimeout(() => {
+      sendSuccessTimerRef.current = window.setTimeout(() => {
         if (mountedRef.current) setSendStatus('idle');
       }, 1200);
     } catch (error) {
       setSendStatus('error');
+      setSendHint('');
       setSendError(error instanceof Error ? error.message : 'Failed to send message');
+    } finally {
+      if (sendHintTimerRef.current) {
+        window.clearTimeout(sendHintTimerRef.current);
+        sendHintTimerRef.current = null;
+      }
     }
   }
+
+  useEffect(() => {
+    return () => {
+      clearSendTimers();
+    };
+  }, []);
 
   return (
     <main className="dashboard-shell">
@@ -669,7 +708,7 @@ function Dashboard() {
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="compose-form">
+            <form onSubmit={handleSubmit} className="compose-form" aria-busy={sendStatus === 'sending'}>
               <label className="field-label" htmlFor="message">
                 Team message
               </label>
@@ -681,6 +720,7 @@ function Dashboard() {
                 onChange={(event) => setDraft(event.target.value)}
                 placeholder="Type a team message..."
                 maxLength={1000}
+                disabled={sendStatus === 'sending'}
                 aria-invalid={Boolean(sendError)}
                 aria-describedby="message-help message-error"
               />
@@ -688,12 +728,21 @@ function Dashboard() {
                 <span className="helper-text" id="message-help">
                   {trimmedDraft.length}/1000
                 </span>
-                <button type="submit" disabled={!canSubmit}>
-                  {sendStatus === 'sending' ? 'Sending...' : 'Send message'}
+                <button type="submit" disabled={!canSubmit} aria-disabled={!canSubmit}>
+                  {sendStatus === 'sending' ? (
+                    <>
+                      <span className="button-spinner" aria-hidden="true" />
+                      <span>Sending…</span>
+                    </>
+                  ) : (
+                    'Send message'
+                  )}
                 </button>
               </div>
-              <p className="form-status" id="message-error" aria-live="polite">
-                {sendError || (sendStatus === 'sent' ? 'Message sent successfully.' : 'Messages are posted to the backend and broadcast to connected clients.')}
+              <p className="form-status" id="message-error" aria-live="polite" role="status">
+                {sendError ||
+                  sendHint ||
+                  (sendStatus === 'sent' ? 'Message sent ✓' : 'Messages are posted to the backend and broadcast to connected clients.')}
               </p>
             </form>
           </section>
